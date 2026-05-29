@@ -51,21 +51,105 @@ resource "google_storage_bucket_object" "cloud_func_source_code_object" {
   source = data.archive_file.api_function_source_code.output_path
 }
 
+# enable cloud apis
+resource "google_project_service" "project_apis" {
+  for_each = toset([
+    "cloudfunctions.googleapis.com",  # Core Cloud Functions API
+    "cloudbuild.googleapis.com",     # Compiles code into a container (Mandatory)
+    "run.googleapis.com",            # 2nd Gen functions run on Cloud Run
+    "artifactregistry.googleapis.com",# Stores the built container image
+    "eventarc.googleapis.com"        # Handles function routing and triggers
+  ])
 
-# resource "google_cloud_scheduler_job" "cloud_func_trigger" {
-#   name             = "cloud_function_trigger"
-#   description      = "Trigger a cloud function on a given scheduled interval"
-#   schedule         = "*/20 * * * *"
-#   time_zone        = "Africa/Lagos"
-#   attempt_deadline = "320s"
+  service            = each.value
+  disable_on_destroy = true
+}
 
-#   retry_config {
-#     retry_count = 1
-#   }
+# Fetch current project information to pull your numerical project ID
+data "google_project" "project" {}
 
-#   http_target {
-#     http_method = "POST"
-#     uri         = "https://example.com/"
-#   }
+# Service account for the API function
+resource "google_service_account" "cloud_function_sa" {
+  account_id   = "cloud-function-sa"
+  display_name = "Cloud Function SA"
+  description  = "Service account for the API Cloud Function"
+}
 
-# }
+# Grant your user account permissions to view the function execution logs
+resource "google_project_iam_member" "user_log_viewer" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.viewer"
+  member  = "user:aviatorifeanyi@gmail.com"
+}
+
+resource "google_service_account_iam_member" "cloud_build_token_creator" {
+  service_account_id = google_service_account.cloud_function_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member = "serviceAccount:${google_service_account.cloud_function_sa.email}"
+}
+
+
+# Give the Compute SA (which runs the Build) rights to write build logs & read source code
+resource "google_project_iam_member" "compute_sa_builder_roles" {
+  for_each = toset([
+    "roles/cloudbuild.builds.builder",
+    "roles/logging.logWriter",
+    "roles/storage.objectViewer",
+    "roles/artifactregistry.admin",
+    "roles/storage.objectViewer"
+  ])
+  project = data.google_project.project.project_id
+  role    = each.value
+  member = "serviceAccount:${google_service_account.cloud_function_sa.email}"
+}
+
+
+resource "google_cloudfunctions2_function" "cloud_func_resource" {
+  name        = "frost-flow-api"
+  description = "Frost Flow API data connection"
+  location = "africa-south1"
+
+  build_config {
+    runtime = "python312"
+    entry_point = "apiConnect"
+    # environment_variables = {
+    #     BUILD_CONFIG_TEST = "build_test"
+    # }
+    
+    #  use the custom service account identity
+    service_account = google_service_account.cloud_function_sa.id
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.cloud_func_source_code.name
+        object = google_storage_bucket_object.cloud_func_source_code_object.name
+      }
+    }
+  }
+
+  service_config {
+    service_account_email = google_service_account.cloud_function_sa.email
+  }
+
+  depends_on = [
+    google_project_service.project_apis,
+    google_service_account_iam_member.cloud_build_token_creator,
+    google_project_iam_member.compute_sa_builder_roles,
+    google_project_service.project_apis
+  ]
+}
+
+
+# Grant public invocation access
+resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
+  project  = google_cloudfunctions2_function.cloud_func_resource.project
+  location = google_cloudfunctions2_function.cloud_func_resource.location
+  
+  name     = google_cloudfunctions2_function.cloud_func_resource.service_config[0].service
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+
+  # Force terraform to wait for the function to fully deploy first
+  depends_on = [google_cloudfunctions2_function.cloud_func_resource]
+}
+
