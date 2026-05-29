@@ -10,7 +10,6 @@ resource "google_storage_bucket" "frost_flow_bucket" {
 }
 
 
-
 resource "google_storage_bucket" "cloud_func_source_code" {
   name     = "cloud_func_source_code_zip"
   location = "africa-south1"
@@ -54,6 +53,7 @@ resource "google_storage_bucket_object" "cloud_func_source_code_object" {
 # enable cloud apis
 resource "google_project_service" "project_apis" {
   for_each = toset([
+    "storage.googleapis.com",
     "cloudfunctions.googleapis.com",    # Core Cloud Functions API
     "cloudbuild.googleapis.com",        # Compiles code into a container (Mandatory)
     "run.googleapis.com",               # 2nd Gen functions run on Cloud Run
@@ -90,18 +90,28 @@ resource "google_service_account_iam_member" "cloud_build_token_creator" {
 }
 
 
-# Give the Compute SA (which runs the Build) rights to write build logs & read source code
+# Give the custom Service account permission 
 resource "google_project_iam_member" "sa_builder_roles" {
   for_each = toset([
     "roles/cloudbuild.builds.builder",
     "roles/logging.logWriter",
     "roles/storage.objectViewer",
-    "roles/artifactregistry.admin",
-    "roles/storage.objectViewer"
+    "roles/artifactregistry.admin"
   ])
   project = data.google_project.project.project_id
   role    = each.value
   member = "serviceAccount:${google_service_account.cloud_function_sa.email}"
+}
+
+# Create a 15-second delay to give Google's IAM replication engine time to catch up
+# Avoid eventual consistency
+resource "time_sleep" "wait_for_iam_replication" {
+  depends_on = [
+    google_project_iam_member.sa_builder_roles,
+    google_service_account_iam_member.cloud_build_token_creator
+  ]
+
+  create_duration = "15s"
 }
 
 
@@ -113,11 +123,8 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
   build_config {
     runtime = "python312"
     entry_point = "apiConnect"
-    # environment_variables = {
-    #     BUILD_CONFIG_TEST = "build_test"
-    # }
     
-    #  use the custom service account identity
+    # use the custom service account identity
     service_account = google_service_account.cloud_function_sa.id
 
     source {
@@ -130,13 +137,15 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
 
   service_config {
     service_account_email = google_service_account.cloud_function_sa.email
+
+    environment_variables = {
+      API_URL = var.api_url
+    }
   }
 
   depends_on = [
-    google_project_service.project_apis,
-    google_service_account_iam_member.cloud_build_token_creator,
-    google_project_iam_member.sa_builder_roles,
-    google_project_service.project_apis
+    google_project_service.project_apis,   
+    time_sleep.wait_for_iam_replication
   ]
 }
 
@@ -153,7 +162,6 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   # Force terraform to wait for the function to fully deploy first
   depends_on = [google_cloudfunctions2_function.cloud_func_resource]
 }
-
 
 
 resource "google_cloud_scheduler_job" "cloud_func_trigger" {
