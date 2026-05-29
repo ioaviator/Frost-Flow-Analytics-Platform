@@ -30,7 +30,7 @@ data "archive_file" "api_function_source_code" {
 
    # Point to the api directory and pull all files
   dynamic "source" {
-    for_each = fileset("${path.module}/../api", "**")
+    for_each = fileset("${path.module}/../api", "**/*.py")
     content {
       content  = file("${path.module}/../api/${source.value}")
       filename = source.value
@@ -63,7 +63,7 @@ resource "google_project_service" "project_apis" {
   ])
 
   service            = each.value
-  disable_on_destroy = true
+  disable_on_destroy = false
 }
 
 # Fetch current project information to pull your numerical project ID
@@ -91,7 +91,7 @@ resource "google_service_account_iam_member" "cloud_build_token_creator" {
 
 
 # Give the Compute SA (which runs the Build) rights to write build logs & read source code
-resource "google_project_iam_member" "compute_sa_builder_roles" {
+resource "google_project_iam_member" "sa_builder_roles" {
   for_each = toset([
     "roles/cloudbuild.builds.builder",
     "roles/logging.logWriter",
@@ -135,7 +135,7 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
   depends_on = [
     google_project_service.project_apis,
     google_service_account_iam_member.cloud_build_token_creator,
-    google_project_iam_member.compute_sa_builder_roles,
+    google_project_iam_member.sa_builder_roles,
     google_project_service.project_apis
   ]
 }
