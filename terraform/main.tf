@@ -54,11 +54,12 @@ resource "google_storage_bucket_object" "cloud_func_source_code_object" {
 # enable cloud apis
 resource "google_project_service" "project_apis" {
   for_each = toset([
-    "cloudfunctions.googleapis.com",  # Core Cloud Functions API
-    "cloudbuild.googleapis.com",     # Compiles code into a container (Mandatory)
-    "run.googleapis.com",            # 2nd Gen functions run on Cloud Run
-    "artifactregistry.googleapis.com",# Stores the built container image
-    "eventarc.googleapis.com"        # Handles function routing and triggers
+    "cloudfunctions.googleapis.com",    # Core Cloud Functions API
+    "cloudbuild.googleapis.com",        # Compiles code into a container (Mandatory)
+    "run.googleapis.com",               # 2nd Gen functions run on Cloud Run
+    "artifactregistry.googleapis.com",  # Stores the built container image
+    "eventarc.googleapis.com",          # Handles function routing and triggers
+    "cloudscheduler.googleapis.com"     # Cloud scheduler
   ])
 
   service            = each.value
@@ -153,3 +154,23 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   depends_on = [google_cloudfunctions2_function.cloud_func_resource]
 }
 
+
+
+resource "google_cloud_scheduler_job" "cloud_func_trigger" {
+  name             = "cloud_function_trigger"
+  description      = "Trigger a cloud function on a given scheduled interval"
+  region      = "europe-west1" 
+  schedule         = "*/2 * * * *"
+  time_zone        = "Africa/Lagos"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 1
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = google_cloudfunctions2_function.cloud_func_resource.service_config[0].uri
+  }
+
+}
