@@ -3,3 +3,7 @@
 *.tfstate
 *.tfstate.*
 .build
+venv
+__pycache__
+example_terraform.tfvars
+main_copy.tf
