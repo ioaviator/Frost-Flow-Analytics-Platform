@@ -5,5 +5,5 @@
 .build
 venv
 __pycache__
-example_terraform.tfvars
+terraform.tfvars
 main_copy.tf

@@ -1,7 +1,7 @@
 
 
 resource "google_storage_bucket" "frost_flow_bucket" {
-  name          = "frost_flow_data"
+  name          = "frost-flow-data"
   location      = "africa-south1"
   force_destroy = true
 
@@ -11,7 +11,7 @@ resource "google_storage_bucket" "frost_flow_bucket" {
 
 
 resource "google_storage_bucket" "cloud_func_source_code" {
-  name     = "cloud_func_source_code_zip"
+  name     = "cloud-func-source-code-zip"
   location = "africa-south1"
   force_destroy = true
 
@@ -61,6 +61,7 @@ resource "google_project_service" "project_apis" {
     "eventarc.googleapis.com",          # Handles function routing and triggers
     "cloudscheduler.googleapis.com"     # Cloud scheduler
   ])
+  
 
   service            = each.value
   disable_on_destroy = false
@@ -83,35 +84,36 @@ resource "google_project_iam_member" "user_log_viewer" {
   member  = "user:aviatorifeanyi@gmail.com"
 }
 
-resource "google_service_account_iam_member" "cloud_build_token_creator" {
-  service_account_id = google_service_account.cloud_function_sa.name
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member = "serviceAccount:${google_service_account.cloud_function_sa.email}"
-}
 
+# resource "google_project_iam_member" "cloud_build_permissions" {
+#   project = data.google_project.project.project_id
+#   role    = "roles/storage.objectViewer"
+#   member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
+# }
 
-# Give the custom Service account permission 
+# custom SA permissions
 resource "google_project_iam_member" "sa_builder_roles" {
   for_each = toset([
+    "roles/storage.objectViewer",
     "roles/cloudbuild.builds.builder",
     "roles/logging.logWriter",
-    "roles/storage.objectViewer",
-    "roles/artifactregistry.admin"
+    "roles/artifactregistry.writer"
   ])
   project = data.google_project.project.project_id
   role    = each.value
-  member = "serviceAccount:${google_service_account.cloud_function_sa.email}"
+  member  = "serviceAccount:${google_service_account.cloud_function_sa.email}"
+
+  depends_on = [ google_service_account.cloud_function_sa ]
 }
 
-# Create a 15-second delay to give Google's IAM replication engine time to catch up
+# Create a 30-second delay to give Google's IAM replication engine time to catch up
 # Avoid eventual consistency
 resource "time_sleep" "wait_for_iam_replication" {
   depends_on = [
-    google_project_iam_member.sa_builder_roles,
-    google_service_account_iam_member.cloud_build_token_creator
+    google_project_iam_member.sa_builder_roles
   ]
 
-  create_duration = "15s"
+  create_duration = "55s"
 }
 
 
@@ -144,8 +146,11 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
   }
 
   depends_on = [
-    google_project_service.project_apis,   
-    time_sleep.wait_for_iam_replication
+    google_project_service.project_apis,
+    time_sleep.wait_for_iam_replication,
+    google_project_iam_member.sa_builder_roles,
+    google_storage_bucket_object.cloud_func_source_code_object
+
   ]
 }
 
