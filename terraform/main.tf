@@ -1,33 +1,28 @@
+# enable cloud apis
+resource "google_project_service" "project_apis" {
+  for_each = toset([
+    "storage.googleapis.com",
+    "cloudfunctions.googleapis.com",   # Core Cloud Functions API
+    "cloudbuild.googleapis.com",       # Compiles code into a container (Mandatory)
+    "run.googleapis.com",              # 2nd Gen functions run on Cloud Run
+    "artifactregistry.googleapis.com", # Stores the built container image
+    "eventarc.googleapis.com",         # Handles function routing and triggers
+    "cloudscheduler.googleapis.com"    # Cloud scheduler
+  ])
 
-
-resource "google_storage_bucket" "frost_flow_bucket" {
-  name          = "frost-flow-data"
-  location      = "africa-south1"
-  force_destroy = true
-
-   # satisfy the organization policy rule
-  uniform_bucket_level_access = true
+  service            = each.value
+  disable_on_destroy = false
 }
 
-
-resource "google_storage_bucket" "cloud_func_source_code" {
-  name     = "cloud-func-source-code-zip"
-  location = "africa-south1"
-  force_destroy = true
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-}
+# Fetch current project information to pull your numerical project ID
+data "google_project" "project" {}
 
 # Package the function source code into a zip
 data "archive_file" "api_function_source_code" {
   type        = "zip"
   output_path = "${path.module}/.build/api-function-source-code.zip"
 
-   # Point to the api directory and pull all files
+  # Point to the api directory and pull all files
   dynamic "source" {
     for_each = fileset("${path.module}/../api", "**/*.py")
     content {
@@ -44,31 +39,35 @@ data "archive_file" "api_function_source_code" {
 }
 
 
+# Google storage account
+resource "google_storage_bucket" "frost_flow_bucket" {
+  name          = "frost-flow-data"
+  location      = "africa-south1"
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+}
+
+# cloud bucket for function code
+resource "google_storage_bucket" "cloud_func_source_code" {
+  name          = "cloud-func-source-code-zip"
+  location      = "africa-south1"
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
+}
+
+# cloud function source code
 resource "google_storage_bucket_object" "cloud_func_source_code_object" {
   name   = "api-function-${data.archive_file.api_function_source_code.output_md5}.zip"
   bucket = google_storage_bucket.cloud_func_source_code.name
   source = data.archive_file.api_function_source_code.output_path
 }
 
-# enable cloud apis
-resource "google_project_service" "project_apis" {
-  for_each = toset([
-    "storage.googleapis.com",
-    "cloudfunctions.googleapis.com",    # Core Cloud Functions API
-    "cloudbuild.googleapis.com",        # Compiles code into a container (Mandatory)
-    "run.googleapis.com",               # 2nd Gen functions run on Cloud Run
-    "artifactregistry.googleapis.com",  # Stores the built container image
-    "eventarc.googleapis.com",          # Handles function routing and triggers
-    "cloudscheduler.googleapis.com"     # Cloud scheduler
-  ])
-  
-
-  service            = each.value
-  disable_on_destroy = false
-}
-
-# Fetch current project information to pull your numerical project ID
-data "google_project" "project" {}
 
 # Service account for the API function
 resource "google_service_account" "cloud_function_sa" {
@@ -81,15 +80,21 @@ resource "google_service_account" "cloud_function_sa" {
 resource "google_project_iam_member" "user_log_viewer" {
   project = data.google_project.project.project_id
   role    = "roles/logging.viewer"
-  member  = "user:aviatorifeanyi@gmail.com"
+  member  = "user:${var.email}"
 }
 
-
-# resource "google_project_iam_member" "cloud_build_permissions" {
-#   project = data.google_project.project.project_id
-#   role    = "roles/storage.objectViewer"
-#   member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
-# }
+# Grant the Cloud Build Service Account the necessary permissions
+resource "google_project_iam_member" "cloud_build_sa_roles" {
+  for_each = toset([
+    "roles/storage.objectViewer",
+    "roles/logging.logWriter",
+    "roles/artifactregistry.writer"
+  ])
+  
+  project = data.google_project.project.project_id
+  role    = each.value
+  member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"
+}
 
 # custom SA permissions
 resource "google_project_iam_member" "sa_builder_roles" {
@@ -103,29 +108,33 @@ resource "google_project_iam_member" "sa_builder_roles" {
   role    = each.value
   member  = "serviceAccount:${google_service_account.cloud_function_sa.email}"
 
-  depends_on = [ google_service_account.cloud_function_sa ]
+  depends_on = [google_service_account.cloud_function_sa]
 }
 
-# Create a 30-second delay to give Google's IAM replication engine time to catch up
+
+# Create a 60-second delay to give Google's IAM replication engine time to catch up
 # Avoid eventual consistency
 resource "time_sleep" "wait_for_iam_replication" {
   depends_on = [
+    google_service_account.cloud_function_sa,
+    google_project_iam_member.sa_builder_roles,
+    google_project_iam_member.user_log_viewer,
     google_project_iam_member.sa_builder_roles
   ]
 
-  create_duration = "55s"
+  create_duration = "60s"
 }
 
 
 resource "google_cloudfunctions2_function" "cloud_func_resource" {
   name        = "frost-flow-api"
   description = "Frost Flow API data connection"
-  location = "africa-south1"
+  location    = "africa-south1"
 
   build_config {
-    runtime = "python312"
+    runtime     = "python312"
     entry_point = "apiConnect"
-    
+
     # use the custom service account identity
     service_account = google_service_account.cloud_function_sa.id
 
@@ -149,8 +158,8 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
     google_project_service.project_apis,
     time_sleep.wait_for_iam_replication,
     google_project_iam_member.sa_builder_roles,
+    google_project_iam_member.cloud_build_sa_roles,
     google_storage_bucket_object.cloud_func_source_code_object
-
   ]
 }
 
@@ -159,10 +168,10 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
 resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   project  = google_cloudfunctions2_function.cloud_func_resource.project
   location = google_cloudfunctions2_function.cloud_func_resource.location
-  
-  name     = google_cloudfunctions2_function.cloud_func_resource.service_config[0].service
-  role     = "roles/run.invoker"
-  member   = "allUsers"
+
+  name   = google_cloudfunctions2_function.cloud_func_resource.service_config[0].service
+  role   = "roles/run.invoker"
+  member = "allUsers"
 
   # Force terraform to wait for the function to fully deploy first
   depends_on = [google_cloudfunctions2_function.cloud_func_resource]
@@ -172,10 +181,10 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
 resource "google_cloud_scheduler_job" "cloud_func_trigger" {
   name             = "cloud_function_trigger"
   description      = "Trigger a cloud function on a given scheduled interval"
-  region      = "europe-west1" 
-  schedule         = "*/2 * * * *"
+  region           = "europe-west1"
+  schedule         = "0 */2 * * *"
   time_zone        = "Africa/Lagos"
-  attempt_deadline = "320s"
+  attempt_deadline = "120s"
 
   retry_config {
     retry_count = 1
@@ -185,5 +194,4 @@ resource "google_cloud_scheduler_job" "cloud_func_trigger" {
     http_method = "POST"
     uri         = google_cloudfunctions2_function.cloud_func_resource.service_config[0].uri
   }
-
 }
