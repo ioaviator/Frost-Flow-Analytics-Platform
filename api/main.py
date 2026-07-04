@@ -7,6 +7,6 @@ def apiConnect(request):
 
     api_data = extract_data()
 
-    upload_json_to_gcs('frost_flow_data', 'frost_flow.json', api_data)
+    upload_json_to_gcs('frost-flow-data', 'frost_flow.json', api_data)
 
     return {"status": "success", "message": "Data successfully uploaded to bucket"}, 200
