@@ -158,6 +158,7 @@ resource "google_cloudfunctions2_function" "cloud_func_resource" {
     google_project_service.project_apis,
     time_sleep.wait_for_iam_replication,
     google_project_iam_member.sa_builder_roles,
+    google_service_account.cloud_function_sa,
     google_project_iam_member.cloud_build_sa_roles,
     google_storage_bucket_object.cloud_func_source_code_object
   ]
