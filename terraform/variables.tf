@@ -10,3 +10,9 @@ variable "email" {
   type        = string
   description = "Email of the logged in user principal on GCP"
 }
+
+
+variable storage_int {
+  type = string
+  description = "Snowflake storage integration service account"
+}

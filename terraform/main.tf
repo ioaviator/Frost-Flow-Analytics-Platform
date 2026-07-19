@@ -196,3 +196,11 @@ resource "google_cloud_scheduler_job" "cloud_func_trigger" {
     uri         = google_cloudfunctions2_function.cloud_func_resource.service_config[0].uri
   }
 }
+
+# grant snowflake storage integration access to storage bucket
+resource "google_storage_bucket_iam_member" "member" {
+  bucket = google_storage_bucket.frost_flow_bucket.name
+  role = "roles/storage.admin"
+  member = "serviceAccount:${var.storage_int}"
+
+}
