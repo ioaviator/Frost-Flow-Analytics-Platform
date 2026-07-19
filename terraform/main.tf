@@ -122,7 +122,7 @@ resource "time_sleep" "wait_for_iam_replication" {
     google_project_iam_member.sa_builder_roles
   ]
 
-  create_duration = "60s"
+  create_duration = "70s"
 }
 
 
