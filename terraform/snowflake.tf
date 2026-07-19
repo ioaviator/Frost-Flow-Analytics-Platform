@@ -32,3 +32,9 @@ resource "snowflake_table" "fema_table" {
     nullable = false
   }
 }
+
+resource "snowflake_storage_integration_gcs" "fema_storage_int" {
+  name                      = "FEMA_STORAGE_INT"
+  enabled                   = true
+  storage_allowed_locations = ["gcs://frost-flow-data/"]
+}
