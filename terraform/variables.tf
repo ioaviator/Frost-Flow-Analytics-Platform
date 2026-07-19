@@ -16,3 +16,8 @@ variable storage_int {
   type = string
   description = "Snowflake storage integration service account"
 }
+
+variable "notification_integration" {
+  type = string
+  description = "Snowflake notification connected to gcp pub/sub"
+}

@@ -204,3 +204,51 @@ resource "google_storage_bucket_iam_member" "member" {
   member = "serviceAccount:${var.storage_int}"
 
 }
+
+# pub sub topic/subscription creation, storage account notification
+
+resource "google_pubsub_topic" "frost_flow_topic" {
+  name = "frost-flow_topic"
+}
+
+resource "google_pubsub_subscription" "frost_flow_sub" {
+  name  = "frost-flow_subscription"
+  topic = google_pubsub_topic.frost_flow_topic.id
+
+  ack_deadline_seconds = 20
+}
+
+resource "google_pubsub_subscription_iam_member" "editor" {
+  subscription = google_pubsub_subscription.frost_flow_sub.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${var.notification_integration}"
+}
+
+# Enable notifications by giving the correct IAM permission to the storage service account.
+data "google_storage_project_service_account" "gcs_account" {
+}
+
+resource "google_pubsub_topic_iam_binding" "pubsub_iam_binding" {
+  topic   = google_pubsub_topic.frost_flow_topic.id
+  role    = "roles/pubsub.publisher"
+  members = ["serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"]
+}
+
+resource "google_storage_notification" "notification" {
+  bucket         = google_storage_bucket.frost_flow_bucket.name
+  payload_format = "JSON_API_V1"
+  topic          = google_pubsub_topic.frost_flow_topic.id
+  event_types    = ["OBJECT_FINALIZE"]
+  custom_attributes = {
+    project = "frost-flow"
+  }
+  depends_on = [google_pubsub_topic_iam_binding.pubsub_iam_binding]
+}
+
+resource "google_project_iam_member" "monitoring_viewer_access" {
+  project =  data.google_project.project.project_id
+  role    = "roles/monitoring.viewer"
+  
+  member       = "serviceAccount:${var.notification_integration}"
+}
+
