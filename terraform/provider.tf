@@ -23,4 +23,6 @@ provider "snowflake" {
   account_name      = var.account_name 
   user              = var.username
   password    	= var.password
+  preview_features_enabled = [ "snowflake_file_format_resource", "snowflake_table_resource" ]
+
 }

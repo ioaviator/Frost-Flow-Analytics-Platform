@@ -51,3 +51,11 @@ resource "snowflake_stage_external_gcs" "fema_stage" {
     none {}
   }
 }
+
+
+resource "snowflake_file_format" "fema_file_format" {
+  name        = "FEMA_FILE_FORMAT"
+  database    = snowflake_database.fema_db.name
+  schema      = snowflake_schema.fema_schema.name
+  format_type = "JSON"
+}
