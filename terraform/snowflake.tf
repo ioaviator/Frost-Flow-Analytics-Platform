@@ -38,3 +38,16 @@ resource "snowflake_storage_integration_gcs" "fema_storage_int" {
   enabled                   = true
   storage_allowed_locations = ["gcs://frost-flow-data/"]
 }
+
+
+resource "snowflake_stage_external_gcs" "fema_stage" {
+  name                = "FEMA_DISASTER_STAGE"
+  database            = snowflake_database.fema_db.name
+  schema              = snowflake_schema.fema_schema.name
+  url                 = "gcs://frost-flow-data/"
+  storage_integration = snowflake_storage_integration_gcs.fema_storage_int.name
+
+  encryption {
+    none {}
+  }
+}
