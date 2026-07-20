@@ -3,7 +3,7 @@ data "google_project" "project" {}
 # grant snowflake storage integration access to storage bucket
 resource "google_storage_bucket_iam_member" "storage_bucket_member" {
   bucket = "fema-disaster-data"
-  role = "roles/storage.admin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${var.storage_int}"
 }
 
@@ -15,10 +15,10 @@ resource "google_pubsub_subscription_iam_member" "pubsub_member" {
 }
 
 resource "google_project_iam_member" "monitoring_viewer_access" {
-  project =  data.google_project.project.project_id
+  project = data.google_project.project.project_id
   role    = "roles/monitoring.viewer"
-  
-  member       = "serviceAccount:${var.notification_integration}"
+
+  member = "serviceAccount:${var.notification_integration}"
 }
 
 
@@ -29,7 +29,7 @@ resource "snowflake_pipe" "fema_gcs_pipe" {
 
   auto_ingest = true
   integration = "FEMA_NOTIFICATION_INT"
-  
+
   # SQL Logic (Wrapped in a heredoc block for clean formatting)
   copy_statement = <<EOT
     COPY INTO fema_disaster.raw.fema_intervention

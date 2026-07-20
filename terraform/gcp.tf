@@ -65,7 +65,7 @@ resource "google_project_iam_member" "cloud_build_sa_roles" {
     "roles/logging.logWriter",
     "roles/artifactregistry.writer"
   ])
-  
+
   project = data.google_project.project.project_id
   role    = each.value
   member  = "serviceAccount:${data.google_project.project.number}@cloudbuild.gserviceaccount.com"

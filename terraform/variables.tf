@@ -1,5 +1,5 @@
-variable project_id {
-  type = string
+variable "project_id" {
+  type        = string
   description = "google cloud project id"
 }
 
@@ -17,21 +17,21 @@ variable "email" {
 
 
 variable "org_name" {
-  type = string
+  type        = string
   description = "snowflake organization name"
 }
 
 variable "account_name" {
-  type = string
+  type        = string
   description = "snowflake account name"
 }
 
 variable "username" {
-  type = string
+  type        = string
   description = "snowflake username"
 }
 
 variable "password" {
-  type = string
+  type        = string
   description = "snowflake password"
 }

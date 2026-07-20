@@ -5,7 +5,7 @@ terraform {
       version = "7.34.0"
     }
     snowflake = {
-      source = "snowflakedb/snowflake"
+      source  = "snowflakedb/snowflake"
       version = "2.18.0"
     }
   }
@@ -20,11 +20,11 @@ provider "google" {
 
 provider "snowflake" {
   organization_name = var.org_name
-  account_name      = var.account_name 
+  account_name      = var.account_name
   user              = var.username
-  password    	= var.password
-  preview_features_enabled = [ 
-    "snowflake_file_format_resource", 
+  password          = var.password
+  preview_features_enabled = [
+    "snowflake_file_format_resource",
     "snowflake_table_resource",
     "snowflake_notification_integration_resource"
   ]
