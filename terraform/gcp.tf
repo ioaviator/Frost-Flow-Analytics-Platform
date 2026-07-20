@@ -14,34 +14,9 @@ resource "google_project_service" "project_apis" {
   disable_on_destroy = false
 }
 
-# Fetch current project information to pull your numerical project ID
-data "google_project" "project" {}
-
-# Package the function source code into a zip
-data "archive_file" "api_function_source_code" {
-  type        = "zip"
-  output_path = "${path.module}/.build/api-function-source-code.zip"
-
-  # Point to the api directory and pull all files
-  dynamic "source" {
-    for_each = fileset("${path.module}/../api", "**/*.py")
-    content {
-      content  = file("${path.module}/../api/${source.value}")
-      filename = source.value
-    }
-  }
-
-  # Point to the requirements.txt file
-  source {
-    content  = file("${path.module}/../requirements.txt")
-    filename = "requirements.txt"
-  }
-}
-
-
 # Google storage account
-resource "google_storage_bucket" "frost_flow_bucket" {
-  name          = "frost-flow-data"
+resource "google_storage_bucket" "fema_disaster_bucket" {
+  name          = "fema-disaster-data"
   location      = "africa-south1"
   force_destroy = true
 
@@ -71,7 +46,7 @@ resource "google_storage_bucket_object" "cloud_func_source_code_object" {
 
 # Service account for the API function
 resource "google_service_account" "cloud_function_sa" {
-  account_id   = "cloud-function-sa"
+  account_id   = "fema-disaster-sa"
   display_name = "Cloud Function SA"
   description  = "Service account for the API Cloud Function"
 }
@@ -122,13 +97,13 @@ resource "time_sleep" "wait_for_iam_replication" {
     google_project_iam_member.sa_builder_roles
   ]
 
-  create_duration = "70s"
+  create_duration = "75s"
 }
 
 
 resource "google_cloudfunctions2_function" "cloud_func_resource" {
-  name        = "frost-flow-api"
-  description = "Frost Flow API data connection"
+  name        = "fema_disaster_api"
+  description = "Fema API data connection"
   location    = "africa-south1"
 
   build_config {
@@ -197,58 +172,33 @@ resource "google_cloud_scheduler_job" "cloud_func_trigger" {
   }
 }
 
-# grant snowflake storage integration access to storage bucket
-resource "google_storage_bucket_iam_member" "member" {
-  bucket = google_storage_bucket.frost_flow_bucket.name
-  role = "roles/storage.admin"
-  member = "serviceAccount:${var.storage_int}"
-
-}
 
 # pub sub topic/subscription creation, storage account notification
 
-resource "google_pubsub_topic" "frost_flow_topic" {
-  name = "frost-flow_topic"
+resource "google_pubsub_topic" "fema_disaster_topic" {
+  name = "fema-disaster-topic"
 }
 
-resource "google_pubsub_subscription" "frost_flow_sub" {
-  name  = "frost-flow_subscription"
-  topic = google_pubsub_topic.frost_flow_topic.id
+resource "google_pubsub_subscription" "fema_disaster_sub" {
+  name  = "fema-disaster_subscription"
+  topic = google_pubsub_topic.fema_disaster_topic.id
 
   ack_deadline_seconds = 20
 }
 
-resource "google_pubsub_subscription_iam_member" "editor" {
-  subscription = google_pubsub_subscription.frost_flow_sub.name
-  role         = "roles/pubsub.subscriber"
-  member       = "serviceAccount:${var.notification_integration}"
-}
-
-# Enable notifications by giving the correct IAM permission to the storage service account.
-data "google_storage_project_service_account" "gcs_account" {
-}
-
 resource "google_pubsub_topic_iam_binding" "pubsub_iam_binding" {
-  topic   = google_pubsub_topic.frost_flow_topic.id
+  topic   = google_pubsub_topic.fema_disaster_topic.id
   role    = "roles/pubsub.publisher"
   members = ["serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"]
 }
 
 resource "google_storage_notification" "notification" {
-  bucket         = google_storage_bucket.frost_flow_bucket.name
+  bucket         = google_storage_bucket.fema_disaster_bucket.name
   payload_format = "JSON_API_V1"
-  topic          = google_pubsub_topic.frost_flow_topic.id
+  topic          = google_pubsub_topic.fema_disaster_topic.id
   event_types    = ["OBJECT_FINALIZE"]
   custom_attributes = {
-    project = "frost-flow"
+    project = "fema_disaster"
   }
   depends_on = [google_pubsub_topic_iam_binding.pubsub_iam_binding]
 }
-
-resource "google_project_iam_member" "monitoring_viewer_access" {
-  project =  data.google_project.project.project_id
-  role    = "roles/monitoring.viewer"
-  
-  member       = "serviceAccount:${var.notification_integration}"
-}
-

@@ -1,20 +1,17 @@
 variable project_id {
   type = string
-  description = "google cloud project id"
+  description = "Google cloud project id"
 }
 
-variable "api_url" {
-  type        = string
-  description = "API Base URL used for data extraction"
-  default     = "https://www.fema.gov/api/open/v2/PublicAssistanceFundedProjectsDetails"
-
+variable storage_int {
+  type = string
+  description = "Snowflake storage integration service account"
 }
 
-variable "email" {
-  type        = string
-  description = "Email of the logged in user principal on GCP"
+variable "notification_integration" {
+  type = string
+  description = "Snowflake notification connected to gcp pub/sub"
 }
-
 
 variable "org_name" {
   type = string
