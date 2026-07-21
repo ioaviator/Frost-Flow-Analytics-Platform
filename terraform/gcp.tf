@@ -167,7 +167,7 @@ resource "google_cloud_scheduler_job" "cloud_func_trigger" {
   name             = "cloud_function_trigger"
   description      = "Trigger a cloud function on a given scheduled interval"
   region           = "europe-west1"
-  schedule         = "0 */2 * * *"
+  schedule         = "0 0 1 * *"
   time_zone        = "Africa/Lagos"
   attempt_deadline = "120s"
 
