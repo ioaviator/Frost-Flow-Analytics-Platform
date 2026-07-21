@@ -21,6 +21,15 @@ resource "google_storage_bucket" "fema_disaster_bucket" {
   force_destroy = true
 
   uniform_bucket_level_access = true
+
+  lifecycle_rule {
+    condition {
+      age = 32 # days
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 # cloud bucket for function code
