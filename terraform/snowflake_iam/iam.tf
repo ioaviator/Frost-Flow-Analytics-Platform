@@ -8,7 +8,7 @@ resource "google_storage_bucket_iam_member" "storage_bucket_member" {
 }
 
 
-resource "google_pubsub_subscription_iam_member" "pubsub_member" {
+resource "google_pubsub_subscription_iam_member" "snowflake_pubsub_subscriber" {
   subscription = "fema-disaster_subscription"
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:${var.notification_integration}"
@@ -30,7 +30,12 @@ resource "snowflake_pipe" "fema_gcs_pipe" {
   auto_ingest = true
   integration = "FEMA_NOTIFICATION_INT"
 
-  # SQL Logic (Wrapped in a heredoc block for clean formatting)
+  depends_on = [
+    google_pubsub_subscription_iam_member.snowflake_pubsub_subscriber,
+    google_project_iam_member.monitoring_viewer_access
+  ]
+
+  # SQL Logic (Wrapped in a heredoc block)
   copy_statement = <<EOT
     COPY INTO fema_disaster.raw.fema_intervention
     FROM (
@@ -39,7 +44,7 @@ resource "snowflake_pipe" "fema_gcs_pipe" {
         METADATA$FILENAME AS src_file,
         $1 AS payload
       FROM @fema_disaster.raw.fema_disaster_stage
-      (FILE_FORMAT => 'fema_disaster.raw.fema_file_format', PATTERN => '.*fema_disaster\\.json')
+      (FILE_FORMAT => 'fema_disaster.raw.fema_file_format', PATTERN => '.*fema_disaster.*\\.json')
     )
   EOT
 }
