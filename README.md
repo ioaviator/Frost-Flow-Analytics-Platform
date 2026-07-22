@@ -10,7 +10,7 @@ The platform provides a secure, scalable, and automated analytics foundation tha
 
 <br>
 
-![data pipeline architecture](./_img/fema_disaster_pipeline.png)
+![data pipeline architecture](./_img/fema_data_pipeline.png)
 
 
 ## Problem Statement
